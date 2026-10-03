@@ -1,0 +1,5 @@
+# Names collected daily and included in the screen. Edit freely.
+symbols: [MU, NVDA, AMD, AVGO, TSLA, PLTR, SMCI]
+benchmarks: [SPY, QQQ]
+# DoltHub backfill starts here (data exists from 2019, three observations a week before late 2024)
+backfill_start: "2024-01-01"
