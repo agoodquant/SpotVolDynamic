@@ -52,6 +52,11 @@ def next_closed_days(last):
     return int((nxt - last).astype(int) - 1)
 
 
+def atm_levels(p):
+    """ATM vol (vol pts) at the start of each pair, plus today's level as a last entry: the `atm` input of the models."""
+    return np.append(p["atm0"].to_numpy(), p["atm0"].iloc[-1] + p["dAtm"].iloc[-1])
+
+
 def make_pairs(sm, tenor_days, earn):
     lo, hi = tenor_band(tenor_days)
     rows = []

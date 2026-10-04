@@ -95,8 +95,11 @@ Everything is in one DuckDB file, `data/spotvol.duckdb` (not in git). Tables: `r
 - One beta for both directions (`EwmModel(symmetric=True)`): its apparent R-squared win on MU came from one day
   (9 Apr 2025, +17% rally, vol -15). Without it the asymmetric model is better; on down days one beta is worst.
 - Crash term (`CrashEwmModel`, drops beyond k daily s.d., one-year memory): right sign for 9 of 10 names but no
-  overall gain; only 2-11 crash days per name in the backtest. k=1.5 beats k=2 on MU. The threshold uses realized
-  s.d., which put MU's split at about -9.5%; scaling by implied vol (about -6%) is untested.
+  overall gain; only 2-11 crash days per name in the backtest. The split distance matters more than how it is
+  scaled: 1.5 s.d. beats 2 under both realized and implied scaling, and implied (atm / sqrt(252)) does about as well
+  as realized at the same k. The listed variant is implied, k=1.5, because its split does not drift out after a
+  turbulent spell (realized put MU's 2-s.d. split at -9.5% in October 2026). It needs the `atm` input
+  (`analysis.atm_levels`).
 - Backtest R-squared is fragile to single extreme days; the accuracy table also shows it without the 3 largest moves.
 - Untested and most promising next: pooling betas, or crash days, across related names (semis).
 

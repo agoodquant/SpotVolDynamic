@@ -43,7 +43,8 @@ def _scores(y, pred, test, r):
 def run(symbol, tenor="1m", target="dFix"):
     p = an.analyse(symbol)["tenors"][tenor]["pairs"]
     y, r, closed = p[target].to_numpy(), p["r"].to_numpy(), p["closed"].to_numpy()
-    paths = {m.name: m.walk_forward(y, r, START, STEP, closed) for m in MODELS}
+    atm = an.atm_levels(p)
+    paths = {m.name: m.walk_forward(y, r, START, STEP, closed, atm) for m in MODELS}
     test = ~np.isnan(paths[PRIMARY]["pred"].to_numpy())
     df = pd.DataFrame({"date": p["d1"].to_numpy(), "r": r, "real": y})
     for name, w in paths.items():

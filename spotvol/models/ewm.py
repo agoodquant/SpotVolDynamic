@@ -81,11 +81,11 @@ class EwmModel(Model):
         """Symmetric coefficients (a, b, [c]) -> the common layout (a, b_up, b_dn, [c])."""
         return np.column_stack([coef[:, :2], coef[:, 1:]]) if self.symmetric else coef
 
-    def forecast(self, y, r, closed=None):
+    def forecast(self, y, r, closed=None, atm=None):
         coef, sd = ewm_path(y, self._X(r, closed), self.halflife, self.prior_obs)
         return forecast_from(self._expand(coef[-1:])[0], sd[-1], {"halflife": self.halflife})
 
-    def walk_forward(self, y, r, start, step=1, closed=None):
+    def walk_forward(self, y, r, start, step=1, closed=None, atm=None):
         coef, _ = ewm_path(y, self._X(r, closed), self.halflife, self.prior_obs)
         coef = self._expand(coef[:-1]).copy()
         coef[:start] = np.nan
@@ -117,11 +117,11 @@ class AdaptiveEwmModel(Model):
         sd = np.array([coefs[best[t]][1][t] for t in range(T + 1)])
         return coef, sd, np.array(self.halflives)[best]
 
-    def forecast(self, y, r, closed=None):
+    def forecast(self, y, r, closed=None, atm=None):
         coef, sd, chosen = self._paths(y, r, closed)
         return forecast_from(coef[-1], sd[-1], {"halflife": int(chosen[-1])})
 
-    def walk_forward(self, y, r, start, step=1, closed=None):
+    def walk_forward(self, y, r, start, step=1, closed=None, atm=None):
         coef, _, chosen = self._paths(y, r, closed)
         coef = coef[:-1].copy()
         coef[:start] = np.nan

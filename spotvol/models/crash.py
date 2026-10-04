@@ -2,9 +2,14 @@
 
     dvol = a + b_up * max(r, 0) + b_dn * max(min(r, 0), -k*s) + g * min(r + k*s, 0) + c_closed * closed_days + noise
 
-s is the stock's daily return standard deviation, estimated from past returns only (exponentially weighted,
-half-life `sd_halflife`). A sell-off is split at k standard deviations: b_dn prices the first k*s of the drop, g the part
-beyond it. With k = 2 that is about -6% for MU and -3% for JPM, so "crash" means the same thing for every name.
+s is the stock's daily standard deviation, so "crash" means a comparable move for every name. Two choices:
+
+  scale="realized"  from past returns only (exponentially weighted, half-life `sd_halflife`). After a turbulent spell
+                    this runs high: in October 2026 it put MU's 2-s.d. split at about -9.5%.
+  scale="implied"   from the ATM implied vol at the start of the day, atm / sqrt(252). MU at 49 vol: 3.1% a day,
+                    so a 2-s.d. split at about -6.2%. Needs the `atm` input.
+
+A sell-off is split at k standard deviations: b_dn prices the first k*s of the drop, g the part beyond it.
 
 Crash days are rare (MU: 36 drops of 5% or more in nearly three years, in about 16 episodes), so a 20-observation memory
 sees only two or three observations' worth of them. The coefficients are therefore estimated in two stages, each day,
@@ -43,15 +48,25 @@ def split_return(r, thresh):
 
 
 class CrashEwmModel(Model):
-    def __init__(self, halflife=20, crash_halflife=250, k=2.0, sd_halflife=60, prior_obs=5):
+    def __init__(self, halflife=20, crash_halflife=250, k=2.0, scale="realized", sd_halflife=60, prior_obs=5):
         self.halflife, self.crash_halflife, self.k, self.sd_halflife, self.prior_obs = halflife, crash_halflife, k, sd_halflife, prior_obs
-        self.name = f"ewm{halflife}_crash"
-        self.label = f"Short memory, half-life {halflife}, with crash term"
+        self.scale = scale
+        iv = scale == "implied"
+        self.name = f"ewm{halflife}_crash" + (f"_iv{k:g}" if iv else "")
+        self.label = f"Short memory, half-life {halflife}, with crash term" + (f" beyond {k:g} implied s.d." if iv else "")
 
-    def _fit(self, y, r, closed):
+    def _thresh(self, r, atm):
+        """Split point, in % of spot, for each observation and (last entry) the next one."""
+        if self.scale == "implied":
+            if atm is None:
+                raise ValueError(f"{self.name} needs the atm input")
+            return self.k * np.asarray(atm, float) / np.sqrt(252)
+        return self.k * causal_sd(r, self.sd_halflife)
+
+    def _fit(self, y, r, closed, atm=None):
         y, r = np.asarray(y, float), np.asarray(r, float)
         closed = np.zeros(len(r)) if closed is None else np.asarray(closed, float)
-        thresh = self.k * causal_sd(r, self.sd_halflife)                     # len(r) + 1
+        thresh = self._thresh(r, atm)                                        # len(r) + 1
         up, dn, cr = split_return(r, thresh[:-1])
         one = np.ones(len(r))
         long_coef, _ = ewm_path(y, np.column_stack([one, up, dn, cr, closed]), self.crash_halflife, self.prior_obs)
@@ -59,14 +74,14 @@ class CrashEwmModel(Model):
         short_coef, sd = ewm_path(y - g[:-1] * cr, np.column_stack([one, up, dn, closed]), self.halflife, self.prior_obs)
         return short_coef, g, thresh, sd, (up, dn, cr, closed)
 
-    def forecast(self, y, r, closed=None):
-        coef, g, thresh, sd, _ = self._fit(y, r, closed)
+    def forecast(self, y, r, closed=None, atm=None):
+        coef, g, thresh, sd, _ = self._fit(y, r, closed, atm)
         a, b_up, b_dn, c = coef[-1]
         return CrashForecast(a, b_up, b_dn, resid_sd=float(sd[-1]), c_closed=float(c), g=float(g[-1]), thresh=float(thresh[-1]),
                              detail={"halflife": self.halflife, "crash_coef": float(g[-1]), "crash_threshold": float(thresh[-1])})
 
-    def walk_forward(self, y, r, start, step=1, closed=None):
-        coef, g, thresh, _, (up, dn, cr, cl) = self._fit(y, r, closed)
+    def walk_forward(self, y, r, start, step=1, closed=None, atm=None):
+        coef, g, thresh, _, (up, dn, cr, cl) = self._fit(y, r, closed, atm)
         coef, g, thresh = coef[:-1].copy(), g[:-1].copy(), thresh[:-1].copy()
         coef[:start], g[:start], thresh[:start] = np.nan, np.nan, np.nan
         df = pd.DataFrame(coef, columns=["a", "b_up", "b_dn", "c_closed"])

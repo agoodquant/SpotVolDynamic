@@ -133,7 +133,7 @@ def _monitor_section(symbol, ten):
            "a negative β down means vol rises on a sell-off. The models differ in how fast they forget old behaviour. "
            "Vendor vols run on a calendar-day clock, so they drift down on ordinary days and jump after a weekend: "
            f"the per-closed-day column is that jump (the primary model's is {f.c_closed:+.2f} per day, so {2 * f.c_closed:+.2f} over a normal weekend), "
-           "and the drift column is the rest. The Markov model has no weekend term. The crash model splits a sell-off at 2 daily standard deviations: "
+           "and the drift column is the rest. The Markov model has no weekend term. The crash model splits a sell-off at 1.5 daily standard deviations implied by the ATM vol: "
            "β down applies to the first part, the crash β (estimated with a one-year memory) to the rest; other models leave those columns blank.</p>", _table(m["table"]),
            f"<p>Expected change in fixed-strike vol for a given next-day spot move, by model, in vol points. The next observation spans "
            f"{m['next_closed']} closed day{'' if m['next_closed'] == 1 else 's'}{' (a weekend)' if m['next_closed'] == 2 else ''}, and the figures include that. "

@@ -18,7 +18,8 @@ def monitor(symbol, tenor="1m", target="dFix"):
         return None
     y, r, closed = p[target].to_numpy(), p["r"].to_numpy(), p["closed"].to_numpy()
     nxt_closed = an.next_closed_days(p["d1"].iloc[-1])
-    forecasts = {m.name: m.forecast(y, r, closed) for m in MODELS}
+    atm = an.atm_levels(p)
+    forecasts = {m.name: m.forecast(y, r, closed, atm) for m in MODELS}
     table = pd.DataFrame([{"model": m.label, "b_up_next": f.b_up, "b_dn_next": f.b_dn, "c_closed": f.c_closed,
                            "a_next": f.a, "crash_coef": f.detail.get("crash_coef"), "crash_threshold": f.detail.get("crash_threshold"),
                            "resid_sd": f.resid_sd} for m in MODELS for f in [forecasts[m.name]]])

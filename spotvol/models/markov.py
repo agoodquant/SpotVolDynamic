@@ -153,7 +153,7 @@ class MarkovModel(Model):
     def __init__(self, refit_every=5):
         self.refit_every = refit_every
 
-    def forecast(self, y, r, closed=None):
+    def forecast(self, y, r, closed=None, atm=None):
         """Number of regimes chosen by BIC. The forecast betas are the regimes' betas weighted by tomorrow's
         regime probabilities."""
         X = design(r)
@@ -166,7 +166,7 @@ class MarkovModel(Model):
                         detail={"n_regimes": f["K"], "bic": bics, "regimes": table, "smooth": f["smooth"],
                                 "regime": table["regime"][k_now], "prob": float(f["filt"][-1][k_now])})
 
-    def walk_forward(self, y, r, start, step=1, closed=None, n_regimes=2):
+    def walk_forward(self, y, r, start, step=1, closed=None, atm=None, n_regimes=2):
         """Parameters are refitted every `refit_every` observations on earlier data only; between refits the regime
         probability is still updated with each new observation. Two regimes throughout."""
         y, X = np.asarray(y, float), design(r)

@@ -19,7 +19,7 @@ class RollingOlsModel(Model):
         self.name = f"ols{window}"
         self.label = f"Rolling {window} observations"
 
-    def forecast(self, y, r, closed=None):
+    def forecast(self, y, r, closed=None, atm=None):
         w = self.window
         return _ols(np.asarray(y, float)[-w:], np.asarray(r, float)[-w:], None if closed is None else np.asarray(closed, float)[-w:])
 
@@ -29,5 +29,5 @@ class ExpandingOlsModel(Model):
     name = "ols_all"
     label = "All history, one regime"
 
-    def forecast(self, y, r, closed=None):
+    def forecast(self, y, r, closed=None, atm=None):
         return _ols(np.asarray(y, float), np.asarray(r, float), closed)

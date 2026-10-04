@@ -51,19 +51,21 @@ class Model:
     name = ""       # short id, used in the database and on the command line
     label = ""      # shown in reports
 
-    def forecast(self, y, r, closed=None) -> Forecast:
-        """Fit on the history given (y = vol changes, r = spot returns, closed = closed-market days spanned by each
-        observation) and forecast the next observation. Models that do not use `closed` ignore it."""
+    def forecast(self, y, r, closed=None, atm=None) -> Forecast:
+        """Fit on the history given and forecast the next observation.
+        y: vol changes; r: spot returns in %; closed: closed-market days spanned by each observation;
+        atm: ATM vol in vol points at the start of each observation, with one extra entry for today's level
+        (len(y) + 1). Models that do not use `closed` or `atm` ignore them."""
         raise NotImplementedError
 
-    def walk_forward(self, y, r, start, step=1, closed=None) -> pd.DataFrame:
+    def walk_forward(self, y, r, start, step=1, closed=None, atm=None) -> pd.DataFrame:
         """Out-of-sample path. Row t holds the coefficients fitted on observations before t and the prediction
         for t given its spot return r[t] (and closed[t]). Rows before `start` are NaN. Coefficients are refitted
         every `step` observations. Models with a faster way to do this override it."""
         y, r = np.asarray(y, float), np.asarray(r, float)
         out = np.full((len(y), 4), np.nan)
         for t0 in range(start, len(y), step):
-            f = self.forecast(y[:t0], r[:t0], None if closed is None else closed[:t0])
+            f = self.forecast(y[:t0], r[:t0], None if closed is None else closed[:t0], None if atm is None else atm[:t0 + 1])
             out[t0:t0 + step] = (f.a, f.b_up, f.b_dn, f.c_closed)
         return path_frame(out, r, closed)
 

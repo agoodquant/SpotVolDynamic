@@ -11,7 +11,7 @@ They differ in how the coefficients are allowed to change through time:
     ewm.py      EwmModel          one set of betas, recent observations weighted more (fixed half-life);
                                   also run with one beta for both directions, and without the weekend term
     ewm.py      AdaptiveEwmModel  the same, choosing its half-life each day from recent forecast errors
-    crash.py    CrashEwmModel     short-memory betas plus a crash term (drops beyond 2 daily s.d.) with a one-year memory
+    crash.py    CrashEwmModel     short-memory betas plus a crash term (drops beyond 1.5 implied daily s.d.), one-year memory
     ols.py      RollingOlsModel   plain regression on the last N observations (benchmark)
     ols.py      ExpandingOlsModel plain regression on all history (benchmark)
 
@@ -24,7 +24,7 @@ from .markov import MarkovModel
 from .ols import ExpandingOlsModel, RollingOlsModel
 
 # the models shown in the monitor, the screen and the backtest, in display order
-MODELS = [EwmModel(halflife=20), CrashEwmModel(), EwmModel(halflife=20, symmetric=True), EwmModel(halflife=20, closed_term=False),
+MODELS = [EwmModel(halflife=20), CrashEwmModel(k=1.5, scale="implied"), EwmModel(halflife=20, symmetric=True), EwmModel(halflife=20, closed_term=False),
           AdaptiveEwmModel(), MarkovModel(),
           RollingOlsModel(60), ExpandingOlsModel()]
 PRIMARY = "ewm20"      # the model whose betas head the screen
