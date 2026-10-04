@@ -37,6 +37,21 @@ def _earn_flag(d0, d1, earn):
     return False
 
 
+def closed_days(d0, d1):
+    """Calendar days between two observations on which the market was shut: weekends, plus weekday holidays only when
+    they fall inside the pair (weekday holidays are not in the calendar used, so a Friday holiday counts as open)."""
+    a = pd.to_datetime(pd.Series(d0)).values.astype("datetime64[D]")
+    b = pd.to_datetime(pd.Series(d1)).values.astype("datetime64[D]")
+    return (b - a).astype(int) - np.busday_count(a, b)
+
+
+def next_closed_days(last):
+    """Closed days between the last observation and the next weekday."""
+    last = np.datetime64(pd.Timestamp(last).date(), "D")
+    nxt = np.busday_offset(last, 1, roll="forward")
+    return int((nxt - last).astype(int) - 1)
+
+
 def make_pairs(sm, tenor_days, earn):
     lo, hi = tenor_band(tenor_days)
     rows = []
@@ -66,6 +81,7 @@ def make_pairs(sm, tenor_days, earn):
     p = p.sort_values(["d1", "pref"]).drop_duplicates("d1").drop(columns="pref")
     p = p[~((p["r"] == 0) & (p["dAtm"] == 0))]            # stale vendor duplicates on holidays
     p = p[p["r"].abs() < MAX_ABS_RETURN]                  # stock splits
+    p["closed"] = closed_days(p["d0"], p["d1"])
     return p.dropna(subset=["dFix"]).reset_index(drop=True)
 
 

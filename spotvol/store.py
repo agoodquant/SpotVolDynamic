@@ -22,7 +22,7 @@ SMILE_COLS = {"date": "DATE", "source": "VARCHAR", "symbol": "VARCHAR", "expirat
               "rr25": "DOUBLE", "fly25": "DOUBLE", "slope": "DOUBLE"}
 MONITOR_COLS = {"date": "DATE", "symbol": "VARCHAR", "tenor": "VARCHAR", "target": "VARCHAR", "model": "VARCHAR",
                 "a_next": "DOUBLE", "b_up_next": "DOUBLE", "b_dn_next": "DOUBLE", "resid_sd": "DOUBLE",
-                "n_regimes": "INTEGER", "regime": "VARCHAR", "prob": "DOUBLE", "halflife": "INTEGER"}
+                "n_regimes": "INTEGER", "regime": "VARCHAR", "prob": "DOUBLE", "halflife": "INTEGER", "c_closed": "DOUBLE"}
 
 
 def _ddl(name, cols):
@@ -37,6 +37,7 @@ def connect():
     con.execute('create table if not exists earnings (symbol VARCHAR, date DATE, "when" VARCHAR, fetched_at TIMESTAMP)')
     con.execute("create table if not exists empty_dates (source VARCHAR, symbol VARCHAR, date DATE)")
     con.execute(_ddl("beta_monitor", MONITOR_COLS))
+    con.execute("alter table beta_monitor add column if not exists c_closed DOUBLE")
     return con
 
 

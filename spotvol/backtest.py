@@ -37,14 +37,14 @@ def _scores(y, pred, test, r):
 
 def run(symbol, tenor="1m", target="dFix"):
     p = an.analyse(symbol)["tenors"][tenor]["pairs"]
-    y, r = p[target].to_numpy(), p["r"].to_numpy()
-    paths = {m.name: m.walk_forward(y, r, START, STEP) for m in MODELS}
+    y, r, closed = p[target].to_numpy(), p["r"].to_numpy(), p["closed"].to_numpy()
+    paths = {m.name: m.walk_forward(y, r, START, STEP, closed) for m in MODELS}
     test = ~np.isnan(paths[PRIMARY]["pred"].to_numpy())
     df = pd.DataFrame({"date": p["d1"].to_numpy(), "r": r, "real": y})
     for name, w in paths.items():
         df[f"pred_{name}"], df[f"b_up_{name}"], df[f"b_dn_{name}"] = w["pred"], w["b_up"], w["b_dn"]
     scores = {m.name: _scores(y, paths[m.name]["pred"].to_numpy(), test, r) for m in MODELS}
-    sens = {h: _scores(y, EwmModel(h).walk_forward(y, r, START)["pred"].to_numpy(), test, r) for h in SENSITIVITY_HALFLIVES}
+    sens = {h: _scores(y, EwmModel(h).walk_forward(y, r, START, closed=closed)["pred"].to_numpy(), test, r) for h in SENSITIVITY_HALFLIVES}
     hindsight = markov.fit(winsorize(y), design(r), 2)["smooth"][:, -1]
     agree = ((paths["markov"]["p_hi"].to_numpy()[test] > 0.5) == (hindsight[test] > 0.5)).mean()
     return {"symbol": symbol, "tenor": tenor, "target": target, "df": df, "test": test, "scores": scores, "sensitivity": sens,

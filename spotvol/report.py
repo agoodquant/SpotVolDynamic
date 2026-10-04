@@ -35,8 +35,8 @@ COLS = {"sample": "Sample", "n": "Obs", "beta_atm": "β ATM", "t_atm": "t", "bet
         "corr_fix": "Corr", "skew_slope": "Skew slope", "beta_fix_up": "β up days", "beta_fix_down": "β down days",
         "horizon_obs": "Horizon (obs)", "bucket": "Spot move", "avg_ret": "Avg move %", "avg_dAtm": "Avg ΔATM vol",
         "avg_dFix": "Avg Δfixed-strike vol", "vol_up_freq": "Vol up", "tenor": "Tenor", "symbol": "Name",
-        "atm": "ATM vol", "rr25": "25Δ RR (put−call)", "date": "As of", "regime": "Regime", "b_up": "β up", "t_up": "t", "b_dn": "β down", "t_dn": "t ", "share": "Share of history", "stay_prob": "Prob. of staying", "duration": "Avg length (obs)", "prob_now": "Prob. today", "prob_next": "Prob. next day", "prob": "Prob.", "move": "Next-day spot move", "exp_dvol": "Expected Δvol, vol pts", "sd_dvol": "± 1 s.d.", "model": "Model", "oos_r2": "R², all days", "oos_r2_up": "R², up days", "oos_r2_down": "R², down days", "b_up_next": "β up, next day", "b_dn_next": "β down, next day", "resid_sd": "One-day noise, vol pts", "beta_fix_3m": "β fixed strike, 3m", "t_fix_3m": "t, 3m"}
-FMT = {"n": "{:.0f}", "resid_sd": "{:.2f}", "t_up": "{:.1f}", "t_dn": "{:.1f}", "share": "{:.0%}", "stay_prob": "{:.0%}", "duration": "{:.0f}", "prob_now": "{:.0%}", "prob_next": "{:.0%}", "prob": "{:.0%}", "exp_dvol": "{:+.2f}", "sd_dvol": "{:.2f}", "oos_r2": "{:+.1%}", "oos_r2_up": "{:+.1%}", "oos_r2_down": "{:+.1%}", "t_fix_3m": "{:.1f}", "horizon_obs": "{:.0f}", "t_atm": "{:.1f}", "t_fix": "{:.1f}", "corr_fix": "{:.2f}",
+        "atm": "ATM vol", "rr25": "25Δ RR (put−call)", "date": "As of", "regime": "Regime", "b_up": "β up", "t_up": "t", "b_dn": "β down", "t_dn": "t ", "share": "Share of history", "stay_prob": "Prob. of staying", "duration": "Avg length (obs)", "prob_now": "Prob. today", "prob_next": "Prob. next day", "prob": "Prob.", "move": "Next-day spot move", "exp_dvol": "Expected Δvol, vol pts", "sd_dvol": "± 1 s.d.", "model": "Model", "oos_r2": "R², all days", "oos_r2_up": "R², up days", "oos_r2_down": "R², down days", "b_up_next": "β up, next day", "b_dn_next": "β down, next day", "resid_sd": "One-day noise, vol pts", "c_closed": "Per closed day", "a_next": "Drift per trading day", "beta_fix_3m": "β fixed strike, 3m", "t_fix_3m": "t, 3m"}
+FMT = {"n": "{:.0f}", "resid_sd": "{:.2f}", "c_closed": "{:+.2f}", "a_next": "{:+.2f}", "t_up": "{:.1f}", "t_dn": "{:.1f}", "share": "{:.0%}", "stay_prob": "{:.0%}", "duration": "{:.0f}", "prob_now": "{:.0%}", "prob_next": "{:.0%}", "prob": "{:.0%}", "exp_dvol": "{:+.2f}", "sd_dvol": "{:.2f}", "oos_r2": "{:+.1%}", "oos_r2_up": "{:+.1%}", "oos_r2_down": "{:+.1%}", "t_fix_3m": "{:.1f}", "horizon_obs": "{:.0f}", "t_atm": "{:.1f}", "t_fix": "{:.1f}", "corr_fix": "{:.2f}",
        "vol_up_freq": "{:.0%}", "avg_ret": "{:.1f}", "avg_dAtm": "{:+.2f}", "avg_dFix": "{:+.2f}", "atm": "{:.1f}", "rr25": "{:+.1f}"}
 
 
@@ -130,9 +130,14 @@ def _monitor_section(symbol, ten):
     out = ["<h2>Next-day asymmetric β</h2>",
            f"<p>The {html.escape(get(PRIMARY).label.lower())} model implies β up = {f.b_up:+.2f} and β down = {f.b_dn:+.2f} for the next observation. "
            "Both are slopes of fixed-strike vol on the spot return, in vol points per 1%: a positive β up means vol rises on a rally, "
-           "a negative β down means vol rises on a sell-off. The models differ in how fast they forget old behaviour.</p>", _table(m["table"]),
-           "<p>Expected change in fixed-strike vol for a given next-day spot move, by model, in vol points. Multiply by vega to get the vol P&L to charge for; "
-           "the one-day noise in the table above is the uncertainty around it.</p>", _table(scen)]
+           "a negative β down means vol rises on a sell-off. The models differ in how fast they forget old behaviour. "
+           "Vendor vols run on a calendar-day clock, so they drift down on ordinary days and jump after a weekend: "
+           f"the per-closed-day column is that jump (the primary model's is {f.c_closed:+.2f} per day, so {2 * f.c_closed:+.2f} over a normal weekend), "
+           "and the drift column is the rest. The Markov model has no weekend term.</p>", _table(m["table"]),
+           f"<p>Expected change in fixed-strike vol for a given next-day spot move, by model, in vol points. The next observation spans "
+           f"{m['next_closed']} closed day{'' if m['next_closed'] == 1 else 's'}{' (a weekend)' if m['next_closed'] == 2 else ''}, and the figures include that. "
+           "For the spot/vol charge itself use the β; multiply by vega to get the vol P&L. "
+           "The one-day noise in the table above is the uncertainty around it.</p>", _table(scen)]
     d = m["forecasts"]["markov"].detail
     bic = d["bic"]
     if d["n_regimes"] == 1:

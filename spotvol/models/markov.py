@@ -8,6 +8,9 @@ winsorized before fitting. The filtered probabilities use data up to each date o
 
 Long memory: the betas of each regime are estimated from all history, and a regime change is only recognised
 after enough contrary days. The backtest shows this makes it slow to turn; see ewm.py for the short-memory model.
+
+It does not use the closed-day (weekend) term that the other models have; the calendar-clock jump after weekends
+therefore sits in its noise.
 """
 import numpy as np
 import pandas as pd
@@ -150,7 +153,7 @@ class MarkovModel(Model):
     def __init__(self, refit_every=5):
         self.refit_every = refit_every
 
-    def forecast(self, y, r):
+    def forecast(self, y, r, closed=None):
         """Number of regimes chosen by BIC. The forecast betas are the regimes' betas weighted by tomorrow's
         regime probabilities."""
         X = design(r)
@@ -163,7 +166,7 @@ class MarkovModel(Model):
                         detail={"n_regimes": f["K"], "bic": bics, "regimes": table, "smooth": f["smooth"],
                                 "regime": table["regime"][k_now], "prob": float(f["filt"][-1][k_now])})
 
-    def walk_forward(self, y, r, start, step=1, n_regimes=2):
+    def walk_forward(self, y, r, start, step=1, closed=None, n_regimes=2):
         """Parameters are refitted every `refit_every` observations on earlier data only; between refits the regime
         probability is still updated with each new observation. Two regimes throughout."""
         y, X = np.asarray(y, float), design(r)

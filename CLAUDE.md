@@ -81,13 +81,18 @@ Everything is in one DuckDB file, `data/spotvol.duckdb` (not in git). Tables: `r
 
 ## Known findings, so they are not re-derived
 
-- Out-of-sample accuracy of every model is low (MU: about 6% R-squared, mean absolute error no better than
-  predicting no change). The up-day effect is real; down-day predictions for MU are not reliable.
+- Vendor vols use a calendar-day clock, so fixed-strike vol drifts down on ordinary days and jumps after weekends
+  (MU: about +1.5 vol pts on Mondays). Every model except Markov has a `closed` term (closed-market days spanned,
+  2 for a weekend) to absorb this; without it the intercept carried the effect as a large negative drift.
+  `analysis.closed_days` ignores weekday holidays.
+- Out-of-sample accuracy is still low: MU about 11% R-squared with the closed term (6% without), mean absolute
+  error 1.85 against 1.92 for predicting no change. The up-day effect is real; down-day predictions are weaker.
 - The short-memory model with half-life 20 is the primary model. That half-life was chosen on the same data
-  it is tested on; 10 and 40 give similar results, 5 is too short.
-- The Markov model recognises regime changes late (real-time call matches hindsight on about 57% of MU days).
-- The short-memory model's intercept picks up recent vol drift, so its expected vol change can differ in sign
-  from its beta.
+  it is tested on; 10 to 80 give similar results, 5 is too short.
+- Tried and not better than the short-memory model: Markov regimes (recognises changes late; real-time call
+  matches hindsight on about 57% of MU days), a Kalman filter with drifting betas, an adaptive half-life,
+  vol mean reversion, term-structure roll-down, yesterday's vol change, and moves scaled by vol level.
+- Untested and most promising next: pooling betas across related names (semis) to cut estimation noise.
 
 ## Reports and charts
 
