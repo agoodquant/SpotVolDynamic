@@ -3,7 +3,7 @@
   raw_quotes   every quote as collected; a (source, symbol, date) slice is written once and never overwritten
   smiles       one row per (date, source, symbol, expiration), derived from raw_quotes
   earnings     cached earnings calendar
-  beta_monitor one row per (date, symbol, tenor): the regime and next-day betas as estimated on that date
+  beta_monitor one row per (date, symbol, tenor, model): the next-day betas as each model estimated them on that date
   empty_dates  dates a source was asked for and had nothing, so they are not asked for again
 """
 import duckdb
@@ -20,9 +20,9 @@ SMILE_COLS = {"date": "DATE", "source": "VARCHAR", "symbol": "VARCHAR", "expirat
               "v25p": "DOUBLE", "k25p": "DOUBLE", "v25c": "DOUBLE", "k25c": "DOUBLE",
               "v10p": "DOUBLE", "k10p": "DOUBLE", "v10c": "DOUBLE", "k10c": "DOUBLE",
               "rr25": "DOUBLE", "fly25": "DOUBLE", "slope": "DOUBLE"}
-MONITOR_COLS = {"date": "DATE", "symbol": "VARCHAR", "tenor": "VARCHAR", "target": "VARCHAR", "n_regimes": "INTEGER",
-                "regime": "VARCHAR", "prob": "DOUBLE", "b_up_next": "DOUBLE", "b_dn_next": "DOUBLE",
-                "b_up_roll60": "DOUBLE", "b_dn_roll60": "DOUBLE"}
+MONITOR_COLS = {"date": "DATE", "symbol": "VARCHAR", "tenor": "VARCHAR", "target": "VARCHAR", "model": "VARCHAR",
+                "a_next": "DOUBLE", "b_up_next": "DOUBLE", "b_dn_next": "DOUBLE", "resid_sd": "DOUBLE",
+                "n_regimes": "INTEGER", "regime": "VARCHAR", "prob": "DOUBLE", "halflife": "INTEGER"}
 
 
 def _ddl(name, cols):
@@ -132,9 +132,11 @@ def add_empty_dates(source, symbol, dates):
         con.execute("insert into empty_dates select source, symbol, cast(date as DATE) from _d")
 
 
-def write_monitor(row):
-    """Keeps the estimate as it stood on each date, so the monitor's own history can be reviewed later."""
+def write_monitor(rows):
+    """Keeps each model's estimate as it stood on each date, so its track record can be reviewed later."""
+    df = pd.DataFrame(rows)
     with connect() as con:
-        con.execute("delete from beta_monitor where date=? and symbol=? and tenor=? and target=?",
-                    [pd.Timestamp(row["date"]).date(), row["symbol"], row["tenor"], row["target"]])
-        _insert(con, "beta_monitor", MONITOR_COLS, pd.DataFrame([row]))
+        for _, r in df.iterrows():
+            con.execute("delete from beta_monitor where date=? and symbol=? and tenor=? and target=? and model=?",
+                        [pd.Timestamp(r["date"]).date(), r["symbol"], r["tenor"], r["target"], r["model"]])
+        _insert(con, "beta_monitor", MONITOR_COLS, df)

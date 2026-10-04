@@ -7,7 +7,9 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
 from . import analysis as an
-from . import regime, store
+from . import monitor as mon
+from . import store
+from .models import MODELS, PRIMARY, get
 from .config import REPORTS, TENORS
 
 BLUE, ORANGE, AQUA, MUTED = "#2a78d6", "#eb6834", "#1baf7a", "#898781"
@@ -33,8 +35,8 @@ COLS = {"sample": "Sample", "n": "Obs", "beta_atm": "β ATM", "t_atm": "t", "bet
         "corr_fix": "Corr", "skew_slope": "Skew slope", "beta_fix_up": "β up days", "beta_fix_down": "β down days",
         "horizon_obs": "Horizon (obs)", "bucket": "Spot move", "avg_ret": "Avg move %", "avg_dAtm": "Avg ΔATM vol",
         "avg_dFix": "Avg Δfixed-strike vol", "vol_up_freq": "Vol up", "tenor": "Tenor", "symbol": "Name",
-        "atm": "ATM vol", "rr25": "25Δ RR (put−call)", "date": "As of", "regime": "Regime", "b_up": "β up", "t_up": "t", "b_dn": "β down", "t_dn": "t ", "share": "Share of history", "stay_prob": "Prob. of staying", "duration": "Avg length (obs)", "prob_now": "Prob. today", "prob_next": "Prob. next day", "prob": "Prob.", "move": "Next-day spot move", "exp_dvol": "Expected Δvol, vol pts", "sd_dvol": "± 1 s.d.", "model": "Model", "oos_r2": "R², all days", "oos_r2_up": "R², up days", "oos_r2_down": "R², down days", "b_up_next": "β up, next day", "b_dn_next": "β down, next day", "b_up_roll60": "β up, rolling 60", "b_dn_roll60": "β down, rolling 60", "beta_fix_3m": "β fixed strike, 3m", "t_fix_3m": "t, 3m"}
-FMT = {"n": "{:.0f}", "t_up": "{:.1f}", "t_dn": "{:.1f}", "share": "{:.0%}", "stay_prob": "{:.0%}", "duration": "{:.0f}", "prob_now": "{:.0%}", "prob_next": "{:.0%}", "prob": "{:.0%}", "exp_dvol": "{:+.2f}", "sd_dvol": "{:.2f}", "oos_r2": "{:+.1%}", "oos_r2_up": "{:+.1%}", "oos_r2_down": "{:+.1%}", "t_fix_3m": "{:.1f}", "horizon_obs": "{:.0f}", "t_atm": "{:.1f}", "t_fix": "{:.1f}", "corr_fix": "{:.2f}",
+        "atm": "ATM vol", "rr25": "25Δ RR (put−call)", "date": "As of", "regime": "Regime", "b_up": "β up", "t_up": "t", "b_dn": "β down", "t_dn": "t ", "share": "Share of history", "stay_prob": "Prob. of staying", "duration": "Avg length (obs)", "prob_now": "Prob. today", "prob_next": "Prob. next day", "prob": "Prob.", "move": "Next-day spot move", "exp_dvol": "Expected Δvol, vol pts", "sd_dvol": "± 1 s.d.", "model": "Model", "oos_r2": "R², all days", "oos_r2_up": "R², up days", "oos_r2_down": "R², down days", "b_up_next": "β up, next day", "b_dn_next": "β down, next day", "resid_sd": "One-day noise, vol pts", "beta_fix_3m": "β fixed strike, 3m", "t_fix_3m": "t, 3m"}
+FMT = {"n": "{:.0f}", "resid_sd": "{:.2f}", "t_up": "{:.1f}", "t_dn": "{:.1f}", "share": "{:.0%}", "stay_prob": "{:.0%}", "duration": "{:.0f}", "prob_now": "{:.0%}", "prob_next": "{:.0%}", "prob": "{:.0%}", "exp_dvol": "{:+.2f}", "sd_dvol": "{:.2f}", "oos_r2": "{:+.1%}", "oos_r2_up": "{:+.1%}", "oos_r2_down": "{:+.1%}", "t_fix_3m": "{:.1f}", "horizon_obs": "{:.0f}", "t_atm": "{:.1f}", "t_fix": "{:.1f}", "corr_fix": "{:.2f}",
        "vol_up_freq": "{:.0%}", "avg_ret": "{:.1f}", "avg_dAtm": "{:+.2f}", "avg_dFix": "{:+.2f}", "atm": "{:.1f}", "rr25": "{:+.1f}"}
 
 
@@ -110,39 +112,38 @@ def _fig_buckets(b):
     return _style(fig, 360).update_layout(hovermode="closest")
 
 
-def _fig_regimes(probs):
+def _fig_regime(dates, smooth, name):
     # two regimes are mirror images, so one line carries everything
-    col = [c for c in probs.columns if c != "date"][-1]
-    fig = go.Figure(go.Scatter(x=probs["date"], y=probs[col], line=dict(color=BLUE, width=2), name=col,
-                               fill="tozeroy", fillcolor="rgba(42,120,214,0.10)"))
+    fig = go.Figure(go.Scatter(x=dates, y=smooth[:, -1], line=dict(color=BLUE, width=2), name=name, fill="tozeroy", fillcolor="rgba(42,120,214,0.10)"))
     fig.update_yaxes(title="Probability", range=[0, 1], tickformat=".0%")
-    return _style(fig, 300).update_layout(showlegend=False, title=dict(text=f"Probability of regime {col}", font=dict(size=14, color=INK), x=0.01))
+    return _style(fig, 300).update_layout(showlegend=False, title=dict(text=f"Probability of regime {name}", font=dict(size=14, color=INK), x=0.01))
 
 
-def _regime_section(symbol, ten):
-    m = regime.monitor(symbol, ten, with_oos=True)
+def _monitor_section(symbol, ten):
+    m = mon.monitor(symbol, ten)
     if m is None:
         return []
-    bic = m["bic"]
-    if m["K"] == 1:
-        intro = (f"A two-regime model does not fit better than a single regime (BIC {bic[1]:.0f} for one, {bic.get(2, float('nan')):.0f} for two), "
-                 "so one set of asymmetric betas is used.")
+    f = m["primary"]
+    scen = m["scenarios"].copy()
+    for c in scen.columns[1:]:
+        scen[c] = scen[c].map("{:+.2f}".format)
+    out = ["<h2>Next-day asymmetric β</h2>",
+           f"<p>The {html.escape(get(PRIMARY).label.lower())} model implies β up = {f.b_up:+.2f} and β down = {f.b_dn:+.2f} for the next observation. "
+           "Both are slopes of fixed-strike vol on the spot return, in vol points per 1%: a positive β up means vol rises on a rally, "
+           "a negative β down means vol rises on a sell-off. The models differ in how fast they forget old behaviour.</p>", _table(m["table"]),
+           "<p>Expected change in fixed-strike vol for a given next-day spot move, by model, in vol points. Multiply by vega to get the vol P&L to charge for; "
+           "the one-day noise in the table above is the uncertainty around it.</p>", _table(scen)]
+    d = m["forecasts"]["markov"].detail
+    bic = d["bic"]
+    if d["n_regimes"] == 1:
+        out += [f"<p>Regime-switching model: two regimes do not fit better than one (BIC {bic[1]:.0f} for one, {bic[2]:.0f} for two).</p>"]
     else:
-        intro = (f"Two regimes fit better than one (BIC {bic[2]:.0f} against {bic[1]:.0f}; a gap under about 6 is weak evidence). "
-                 f"Today the model puts {m['prob_now']:.0%} on <b>{html.escape(m['regime_name'])}</b>.")
-    out = ["<h2>Regime monitor: asymmetric β for the next day</h2>",
-           f"<p>{intro} For the next observation it implies β up = {m['b_up_next']:+.2f} and β down = {m['b_dn_next']:+.2f} "
-           f"(rolling 60-observation estimates: {m['b_up_roll60']:+.2f} and {m['b_dn_roll60']:+.2f}). Both are slopes of fixed-strike vol on the spot "
-           "return, in vol points per 1%: a positive β up means vol rises on a rally, a negative β down means vol rises on a sell-off.</p>",
-           _table(m["regimes"])]
-    if m["K"] > 1:
-        out += [f'<div class="card">{_fig_regimes(m["probs"]).to_html(full_html=False, include_plotlyjs=False, config={"displaylogo": False})}</div>']
-    out += ["<p>Expected change in fixed-strike vol for a given next-day spot move, weighting the regimes by their next-day probability. "
-            "Multiply by vega to get the vol P&L to charge for; the ± column is the one-day noise around it.</p>", _table(m["scenarios"])]
-    if m.get("oos") is not None:
-        out += ["<p>Out-of-sample check: each model is refitted every 10 observations on the data available at the time and predicts the next vol change "
-                "given the spot move. R² is the share of the vol-change variance explained, against predicting no change. Negative means worse than predicting nothing.</p>",
-                _table(m["oos"])]
+        out += [f"<p>Regime-switching model: two regimes fit better than one (BIC {bic[2]:.0f} against {bic[1]:.0f}; a gap under about 6 is weak evidence). "
+                f"Today it puts {d['prob']:.0%} on <b>{html.escape(d['regime'])}</b>.</p>", _table(d["regimes"]),
+                f'<div class="card">{_fig_regime(m["dates"], d["smooth"], d["regimes"]["regime"].iloc[-1]).to_html(full_html=False, include_plotlyjs=False, config={"displaylogo": False})}</div>']
+    bt = REPORTS / f"{symbol}_backtest.html"
+    out += [f'<p>How accurate these models have been out of sample: <a href="{bt.name}">backtest report</a>.</p>' if bt.exists()
+            else f"<p>To see how accurate these models have been out of sample, run <code>python -m spotvol backtest {symbol}</code>.</p>"]
     return out
 
 
@@ -206,7 +207,7 @@ def write_report(symbol, bench=None):
              "<h2>Rolling 60-observation β against the skew</h2>", f'<div class="card">{divs[1]}</div>',
              "<h2>Daily vol change against spot move</h2>", f'<div class="card">{divs[2]}</div>',
              "<h2>Average vol change by size of spot move, last 12 months</h2>", f'<div class="card">{divs[3]}</div>', _table(an.buckets(_last(p, 365))),
-             *_regime_section(symbol, ten),
+             *_monitor_section(symbol, ten),
              "<h2>By calendar period</h2>", _table(an.regimes(p)),
              "<h2>By horizon, last 12 months</h2><p>Non-overlapping windows of consecutive observations.</p>", _table(an.horizons(_last(p, 365))),
              "<h2>By tenor</h2><p>Longer tenors need the daily Yahoo snapshots to accumulate; they appear here once there are 20 observations.</p>", _table(_tenor_table(res))]
@@ -239,18 +240,16 @@ def write_screen(symbols, tenor="1m"):
         rows.append({"symbol": s, "date": last["date"], "atm": 100 * last["atm"], "rr25": 100 * last["rr25"], "skew_slope": s6["skew_slope"],
                      "beta_atm": s6["beta_atm"], "beta_fix": s6["beta_fix"], "t_fix": s6["t_fix"],
                      "n": s6["n"]})
-        m = regime.monitor(s, tenor)
+        m = mon.monitor(s, tenor)
         if m:
-            row = {"date": m["date"], "symbol": s, "tenor": tenor, "target": m["target"], "n_regimes": m["K"], "regime": m["regime_name"],
-                   "prob": m["prob_now"], **{k: m[k] for k in ("b_up_next", "b_dn_next", "b_up_roll60", "b_dn_roll60")}}
-            store.write_monitor(row)
-            rows[-1].update({k: row[k] for k in ("regime", "prob", "b_up_next", "b_dn_next", "b_up_roll60", "b_dn_roll60")})
+            store.write_monitor(mon.rows_for_store(m))
+            d = m["forecasts"]["markov"].detail
+            rows[-1].update({"b_up_next": m["primary"].b_up, "b_dn_next": m["primary"].b_dn, "regime": d["regime"], "prob": d["prob"]})
     df = pd.DataFrame(rows).sort_values("beta_fix", ascending=False)
     REPORTS.mkdir(exist_ok=True)
     df.to_csv(REPORTS / "screen.csv", index=False)
     body = (f"<h1>Spot/vol screen</h1><p>Tenor {tenor}, last 6 months unless stated, earnings excluded. Sorted by fixed-strike β: names at the top are those "
-            "where vol rises with spot beyond what the skew prices. β in vol points per 1% spot move. The regime columns come from the regime-switching "
-            "model on fixed-strike vol: β up and β down are the slopes it implies for the next day's rally or sell-off.</p>" + _table(df))
+            "where vol rises with spot beyond what the skew prices. β in vol points per 1% spot move. β up and β down for the next day come from the short-memory model; the regime is the regime-switching model's current call.</p>" + _table(df))
     path = REPORTS / "screen.html"
     path.write_text(f'<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">'
                     f"<title>Spot/vol screen</title><style>{CSS}</style></head><body><main>{body}</main></body></html>", encoding="utf-8")
