@@ -254,3 +254,30 @@ def write_screen(symbols, tenor="1m"):
     path.write_text(f'<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">'
                     f"<title>Spot/vol screen</title><style>{CSS}</style></head><body><main>{body}</main></body></html>", encoding="utf-8")
     return path
+
+
+def write_index():
+    """reports/index.html: one row per name with links to its report and backtest, and the screen's headline numbers.
+    Rebuilt from whatever report files exist, so it is safe to call after any write."""
+    screen = pd.read_csv(REPORTS / "screen.csv", parse_dates=["date"]).set_index("symbol") if (REPORTS / "screen.csv").exists() else pd.DataFrame()
+    names = sorted(p.stem for p in REPORTS.glob("*.html") if p.stem not in ("index", "screen") and not p.stem.endswith("_backtest"))
+    rows = ""
+    for s in names:
+        bt = REPORTS / f"{s}_backtest.html"
+        cells = [f'<a href="{s}.html">{s}</a>', f'<a href="{bt.name}">Backtest</a>' if bt.exists() else "–"]
+        if s in screen.index:
+            r = screen.loc[s]
+            cells += [f"{r['date']:%Y-%m-%d}", f"{r['atm']:.1f}", f"{r['beta_fix']:+.2f}", f"{r['b_up_next']:+.2f}", f"{r['b_dn_next']:+.2f}",
+                      html.escape(str(r["regime"]))]
+        else:
+            cells += ["–"] * 6
+        rows += "<tr>" + "".join(f"<td>{c}</td>" for c in cells) + "</tr>"
+    head = "".join(f"<th>{h}</th>" for h in ("Name", "Backtest", "As of", "ATM vol", "β fixed strike, 6m", "β up, next day", "β down, next day", "Regime (Markov)"))
+    body = (f"<h1>Spot/vol reports</h1><p>Start with the <a href=\"screen.html\">screen</a>, which ranks every name by how much its vol moves with spot "
+            "beyond what the skew prices. β in vol points per 1% spot move; next-day betas from the short-memory model.</p>"
+            f'<div class="card"><table><thead><tr>{head}</tr></thead><tbody>{rows}</tbody></table></div>'
+            f"<p>Index rebuilt {pd.Timestamp.now():%Y-%m-%d %H:%M}. Names without screen numbers are not in <code>universe.yaml</code>.</p>")
+    path = REPORTS / "index.html"
+    path.write_text(f'<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">'
+                    f"<title>Spot/vol reports</title><style>{CSS}a {{ color: {BLUE}; }} th:nth-child(2), td:nth-child(2), th:last-child, td:last-child {{ text-align: left; }}</style></head><body><main>{body}</main></body></html>", encoding="utf-8")
+    return path

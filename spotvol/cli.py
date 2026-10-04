@@ -7,6 +7,8 @@
   screen               rank the universe by realized spot/vol beta, with today's regime and next-day betas
   backtest SYM         rolling out-of-sample test of the regime model, writes reports/<SYM>_backtest.html
   daily                snapshot + backfill + build + screen for the whole universe
+
+Every command that writes a report also rebuilds reports/index.html.
 """
 import argparse
 import sys
@@ -71,21 +73,30 @@ def main(argv=None):
             cmd_backfill([x for x in have if not _has_data(x)], u)
             cmd_build(have)
             print("wrote", report.write_report(s, args.bench.upper() if args.bench else None))
+        _write_index()
     elif args.command == "backtest":
         from . import backtest
         if not args.symbols:
             sys.exit("backtest needs a symbol")
         for s in syms:
             print("wrote", backtest.write_backtest(s))
+        _write_index()
     elif args.command == "screen":
         from . import report
         print("wrote", report.write_screen(syms))
+        _write_index()
     elif args.command == "daily":
         from . import report
         cmd_snapshot(syms)
         cmd_backfill(syms, u)
         cmd_build(syms)
         print("wrote", report.write_screen(syms))
+        _write_index()
+
+
+def _write_index():
+    from . import report
+    print("wrote", report.write_index())
 
 
 def _has_data(symbol):
