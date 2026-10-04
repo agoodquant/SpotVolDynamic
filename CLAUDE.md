@@ -92,7 +92,13 @@ Everything is in one DuckDB file, `data/spotvol.duckdb` (not in git). Tables: `r
 - Tried and not better than the short-memory model: Markov regimes (recognises changes late; real-time call
   matches hindsight on about 57% of MU days), a Kalman filter with drifting betas, an adaptive half-life,
   vol mean reversion, term-structure roll-down, yesterday's vol change, and moves scaled by vol level.
-- Untested and most promising next: pooling betas across related names (semis) to cut estimation noise.
+- One beta for both directions (`EwmModel(symmetric=True)`): its apparent R-squared win on MU came from one day
+  (9 Apr 2025, +17% rally, vol -15). Without it the asymmetric model is better; on down days one beta is worst.
+- Crash term (`CrashEwmModel`, drops beyond k daily s.d., one-year memory): right sign for 9 of 10 names but no
+  overall gain; only 2-11 crash days per name in the backtest. k=1.5 beats k=2 on MU. The threshold uses realized
+  s.d., which put MU's split at about -9.5%; scaling by implied vol (about -6%) is untested.
+- Backtest R-squared is fragile to single extreme days; the accuracy table also shows it without the 3 largest moves.
+- Untested and most promising next: pooling betas, or crash days, across related names (semis).
 
 ## Reports and charts
 

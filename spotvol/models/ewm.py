@@ -62,23 +62,34 @@ def ewm_path(y, X, halflife, prior_obs):
 
 
 class EwmModel(Model):
-    def __init__(self, halflife=20, prior_obs=5, closed_term=True):
-        self.halflife, self.prior_obs, self.closed_term = halflife, prior_obs, closed_term
-        self.name = f"ewm{halflife}" + ("" if closed_term else "_nowkd")
-        self.label = f"Short memory, half-life {halflife} observations" + ("" if closed_term else ", no weekend term")
+    """symmetric=True fits one beta for rallies and sell-offs alike (columns: intercept, r, closed days); the
+    forecast then reports that beta as both b_up and b_dn."""
+
+    def __init__(self, halflife=20, prior_obs=5, closed_term=True, symmetric=False):
+        self.halflife, self.prior_obs, self.closed_term, self.symmetric = halflife, prior_obs, closed_term, symmetric
+        self.name = f"ewm{halflife}" + ("" if closed_term else "_nowkd") + ("_sym" if symmetric else "")
+        self.label = (f"Short memory, half-life {halflife} observations" + ("" if closed_term else ", no weekend term")
+                      + (", one β for both directions" if symmetric else ""))
 
     def _X(self, r, closed):
-        return design(r, closed if self.closed_term and closed is not None else None)
+        X = design(r, closed if self.closed_term and closed is not None else None)
+        if self.symmetric:
+            X = np.column_stack([X[:, 0], X[:, 1] + X[:, 2], X[:, 3:]])      # up part + down part = r
+        return X
+
+    def _expand(self, coef):
+        """Symmetric coefficients (a, b, [c]) -> the common layout (a, b_up, b_dn, [c])."""
+        return np.column_stack([coef[:, :2], coef[:, 1:]]) if self.symmetric else coef
 
     def forecast(self, y, r, closed=None):
         coef, sd = ewm_path(y, self._X(r, closed), self.halflife, self.prior_obs)
-        return forecast_from(coef[-1], sd[-1], {"halflife": self.halflife})
+        return forecast_from(self._expand(coef[-1:])[0], sd[-1], {"halflife": self.halflife})
 
     def walk_forward(self, y, r, start, step=1, closed=None):
         coef, _ = ewm_path(y, self._X(r, closed), self.halflife, self.prior_obs)
-        coef = coef[:-1].copy()
+        coef = self._expand(coef[:-1]).copy()
         coef[:start] = np.nan
-        return path_frame(coef, r, closed)
+        return path_frame(coef, r, closed if self.closed_term else None)
 
 
 class AdaptiveEwmModel(Model):

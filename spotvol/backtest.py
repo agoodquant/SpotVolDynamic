@@ -21,13 +21,18 @@ STEP = 5          # refit interval for models that are not refitted every day
 SENSITIVITY_HALFLIVES = (5, 10, 20, 40, 80)
 
 
+ROBUST_DROP = 3   # robust R-squared leaves out this many of the largest realized vol moves
+
+
 def _score(y, pred, mask, r, big=1.0):
     q = mask & ~np.isnan(pred)
     if q.sum() < 10:
-        return {"n": int(q.sum()), "r2": np.nan, "hit": np.nan, "mae": np.nan}
+        return {"n": int(q.sum()), "r2": np.nan, "r2_robust": np.nan, "hit": np.nan, "mae": np.nan}
     e = y[q] - pred[q]
     qb = q & (np.abs(r) >= big)
+    keep = np.argsort(np.abs(y[q]))[:-ROBUST_DROP]          # a single extreme day can swing R-squared by several points
     return {"n": int(q.sum()), "r2": 1 - (e ** 2).sum() / (y[q] ** 2).sum(), "mae": np.abs(e).mean(),
+            "r2_robust": 1 - (e[keep] ** 2).sum() / (y[q][keep] ** 2).sum(),
             "hit": (np.sign(pred[qb]) == np.sign(y[qb])).mean() if qb.sum() else np.nan}
 
 
@@ -59,11 +64,13 @@ def _pct(x, signed=True):
 
 def _accuracy_table(bt):
     mae0 = np.abs(bt["y"][bt["test"]]).mean()
-    rows = [{"Model": m.label, "Obs": s["all"]["n"], "R², all days": _pct(s["all"]["r2"]), "R², up days": _pct(s["up"]["r2"]),
+    rows = [{"Model": m.label, "Obs": s["all"]["n"], "R², all days": _pct(s["all"]["r2"]),
+             f"R², without {ROBUST_DROP} largest moves": _pct(s["all"]["r2_robust"]), "R², up days": _pct(s["up"]["r2"]),
              "R², down days": _pct(s["down"]["r2"]), "Direction right, up days": _pct(s["up"]["hit"], False),
              "Direction right, down days": _pct(s["down"]["hit"], False), "Mean abs. error": f"{s['all']['mae']:.2f}"}
             for m in MODELS for s in [bt["scores"][m.name]]]
-    rows.append({"Model": "Predicting no change", "Obs": rows[0]["Obs"], "R², all days": "0.0%", "R², up days": "0.0%", "R², down days": "0.0%",
+    rows.append({"Model": "Predicting no change", "Obs": rows[0]["Obs"], "R², all days": "0.0%", f"R², without {ROBUST_DROP} largest moves": "0.0%",
+                 "R², up days": "0.0%", "R², down days": "0.0%",
                  "Direction right, up days": "–", "Direction right, down days": "–", "Mean abs. error": f"{mae0:.2f}"})
     return pd.DataFrame(rows)
 
@@ -142,6 +149,7 @@ def write_backtest(symbol):
              f'<p class="verdict">{html.escape(get(PRIMARY).label)}: on up days it explains {s["up"]["r2"]:.0%} of the vol-change variance and gets the direction right '
              f'{s["up"]["hit"]:.0%} of the time (moves of 1% or more); on down days {s["down"]["r2"]:.0%} and {s["down"]["hit"]:.0%}.</p>',
              "<h2>Accuracy by model</h2><p>R² is against predicting no vol change; negative means worse than predicting nothing. "
+             f"The second R² leaves out the {ROBUST_DROP} days with the largest realized vol moves, since one extreme day can swing the first by several points. "
              "Direction right counts days with a spot move of at least 1%.</p>", _table(_accuracy_table(bt)),
              "<h2>What each model would have charged against what happened</h2>"
              "<p>Running totals of predicted and realized fixed-strike vol change, per unit of vega, on up days and down days separately.</p>",

@@ -20,7 +20,8 @@ def monitor(symbol, tenor="1m", target="dFix"):
     nxt_closed = an.next_closed_days(p["d1"].iloc[-1])
     forecasts = {m.name: m.forecast(y, r, closed) for m in MODELS}
     table = pd.DataFrame([{"model": m.label, "b_up_next": f.b_up, "b_dn_next": f.b_dn, "c_closed": f.c_closed,
-                           "a_next": f.a, "resid_sd": f.resid_sd} for m in MODELS for f in [forecasts[m.name]]])
+                           "a_next": f.a, "crash_coef": f.detail.get("crash_coef"), "crash_threshold": f.detail.get("crash_threshold"),
+                           "resid_sd": f.resid_sd} for m in MODELS for f in [forecasts[m.name]]])
     scenarios = pd.DataFrame({"move": [f"{s:+d}%" for s in SCENARIOS],
                               **{m.label: forecasts[m.name].predict(SCENARIOS, nxt_closed) for m in MODELS}})
     return {"symbol": symbol, "tenor": tenor, "target": target, "date": p["d1"].iloc[-1], "dates": p["d1"].to_numpy(), "n": len(p),
@@ -34,5 +35,6 @@ def rows_for_store(m):
         out.append({"date": m["date"], "symbol": m["symbol"], "tenor": m["tenor"], "target": m["target"], "model": name,
                     "a_next": f.a, "b_up_next": f.b_up, "b_dn_next": f.b_dn, "c_closed": f.c_closed, "resid_sd": f.resid_sd,
                     "n_regimes": f.detail.get("n_regimes"), "regime": f.detail.get("regime"), "prob": f.detail.get("prob"),
-                    "halflife": f.detail.get("halflife")})
+                    "halflife": f.detail.get("halflife"), "crash_coef": f.detail.get("crash_coef"),
+                    "crash_threshold": f.detail.get("crash_threshold")})
     return out
